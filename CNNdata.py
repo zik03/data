@@ -11,77 +11,77 @@ from sklearn.metrics import classification_report
 import tensorflow as tf
 import random
 
-# 固定随机种子
+# Set random seeds for reproducibility
 np.random.seed(42)
 tf.random.set_seed(42)
 random.seed(42)
 
-# 图像尺寸和批次大小设置
+# Image dimensions and batch size settings
 img_width, img_height = 224, 224
 batch_size = 64
 epochs = 25
 
-# 数据增强
+# Data augmentation
 regularized_datagen = ImageDataGenerator(
-    rescale=1.0 / 255,
-    rotation_range=15,
-    width_shift_range=0.15,
-    height_shift_range=0.15,
-    zoom_range=0.2,
-    horizontal_flip=True
+    rescale=1.0 / 255,  # Normalize pixel values
+    rotation_range=15,  # Random rotation
+    width_shift_range=0.15,  # Horizontal shift
+    height_shift_range=0.15,  # Vertical shift
+    zoom_range=0.2,  # Random zoom
+    horizontal_flip=True  # Horizontal flip
 )
 
-# 定义速度值到分类标签的映射
+# Map speed values to classification labels
 speed_to_class = {0.0025: 0, 0.005: 1, 0.01: 2, 0.02: 3, 0.04: 4}
 
-# 模型构建函数
+# Function to build the classification model
 def build_classification_model(regularized=False):
-    reg = 0.005 if regularized else 0.0
-    dropout_rate = 0.5 if regularized else 0.0
+    reg = 0.005 if regularized else 0.0  # Regularization parameter
+    dropout_rate = 0.5 if regularized else 0.0  # Dropout rate
 
     model = Sequential()
     inputShape = (img_width, img_height, 3)
 
-    # 第一卷积层
+    # First convolutional layer
     model.add(Conv2D(32, (5, 5), padding="same", input_shape=inputShape, kernel_regularizer=l2(reg)))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     if dropout_rate > 0: model.add(Dropout(dropout_rate))
 
-    # 第二卷积层
+    # Second convolutional layer
     model.add(Conv2D(64, (5, 5), padding="same", kernel_regularizer=l2(reg)))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     if dropout_rate > 0: model.add(Dropout(dropout_rate))
 
-    # 第三卷积层
+    # Third convolutional layer
     model.add(Conv2D(128, (5, 5), padding="same", kernel_regularizer=l2(reg)))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     if dropout_rate > 0: model.add(Dropout(dropout_rate))
 
-    # 全连接层
+    # Fully connected layer
     model.add(Flatten())
     model.add(Dense(256, kernel_regularizer=l2(reg)))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
     if dropout_rate > 0: model.add(Dropout(dropout_rate))
 
-    # 分类输出层
-    model.add(Dense(5, activation="softmax"))  # 5 表示分类类别数
+    # Classification output layer
+    model.add(Dense(5, activation="softmax"))  # 5 categories
     return model
 
-# 检查文件路径
+# Check if the file path exists
 def check_file_path(file_path, file_type="path"):
     if not os.path.exists(file_path):
         print(f"Error: {file_type.capitalize()} '{file_path}' does not exist.")
         return False
     return True
 
-# 加载训练数据并添加分类标签
+# Load training data and assign classification labels
 def load_images_with_classes(paths_and_labels, img_size=(img_width, img_height)):
     images, labels = [], []
     for path, label in paths_and_labels.items():
@@ -90,15 +90,15 @@ def load_images_with_classes(paths_and_labels, img_size=(img_width, img_height))
         for filename in os.listdir(path):
             img_path = os.path.join(path, filename)
             try:
-                image = load_img(img_path, target_size=img_size)
-                image = img_to_array(image) / 255.0
+                image = load_img(img_path, target_size=img_size)  # Load image and resize
+                image = img_to_array(image) / 255.0  # Normalize pixel values
                 images.append(image)
-                labels.append(label)
+                labels.append(label)  # Assign label
             except Exception as e:
                 print(f"Skipping file: {filename}, error: {e}")
     return np.array(images), np.array(labels)
 
-# 从 Excel 文件加载测试数据并分配分类标签
+# Load test data from an Excel file and assign classification labels
 def load_test_images_from_excel(test_path, labels_file, img_size=(img_width, img_height)):
     labels_df = pd.read_excel(labels_file)
     images, labels = [], []
@@ -112,36 +112,36 @@ def load_test_images_from_excel(test_path, labels_file, img_size=(img_width, img
             continue
 
         try:
-            image = load_img(img_path, target_size=img_size)
-            image = img_to_array(image) / 255.0
+            image = load_img(img_path, target_size=img_size)  # Load image and resize
+            image = img_to_array(image) / 255.0  # Normalize pixel values
             images.append(image)
 
-            # 将速度值映射到分类标签
+            # Map speed values to classification labels
             labels.append(speed_to_class[speed])
         except Exception as e:
             print(f"Skipping file: {filename}, error: {e}")
 
     return np.array(images), np.array(labels)
 
-# 训练模型
+# Train the classification model
 def train_classification_model(model, datagen, train_images, train_labels, test_images, test_labels):
     model.compile(optimizer=Adam(learning_rate=0.0001),
-                  loss="sparse_categorical_crossentropy",
-                  metrics=["accuracy"])
+                  loss="sparse_categorical_crossentropy",  # Use sparse categorical cross-entropy for integer labels
+                  metrics=["accuracy"])  # Track accuracy
 
     history = model.fit(
-        datagen.flow(train_images, train_labels, batch_size=batch_size),
-        steps_per_epoch=len(train_images) // batch_size,
-        epochs=epochs,
-        validation_data=(test_images, test_labels),
+        datagen.flow(train_images, train_labels, batch_size=batch_size),  # Training data generator
+        steps_per_epoch=len(train_images) // batch_size,  # Steps per epoch
+        epochs=epochs,  # Number of epochs
+        validation_data=(test_images, test_labels),  # Validation data
         verbose=1
     )
 
     return history
 
-# 绘制训练过程图
+# Plot the training history
 def plot_training_history(history):
-    # 绘制损失图
+    # Plot loss
     plt.figure(figsize=(10, 5))
     plt.plot(history.history['loss'], label='Training Loss')
     plt.plot(history.history['val_loss'], label='Validation Loss')
@@ -152,7 +152,7 @@ def plot_training_history(history):
     plt.grid()
     plt.show()
 
-    # 绘制准确率图
+    # Plot accuracy
     plt.figure(figsize=(10, 5))
     plt.plot(history.history['accuracy'], label='Training Accuracy')
     plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
@@ -163,7 +163,7 @@ def plot_training_history(history):
     plt.grid()
     plt.show()
 
-# 加载训练数据
+# Load training data
 train_data = {
     'D:/CNN/data/train/velocity_0.0025': 0.0025,
     'D:/CNN/data/train/velocity_0.005': 0.005,
@@ -174,15 +174,15 @@ train_data = {
 train_images, train_labels = load_images_with_classes(train_data)
 train_labels = np.array([speed_to_class[label] for label in train_labels])
 
-# 加载测试数据
+# Load test data
 test_path = 'D:/CNN/data/test'
 test_labels_file = 'D:/CNN/data/test/test_images_speeds.xlsx'
 test_images, test_labels = load_test_images_from_excel(test_path, test_labels_file)
 
-# 构建分类模型
+# Build the classification model
 classification_model = build_classification_model(regularized=True)
 
-# 训练分类模型
+# Train the classification model
 classification_history = train_classification_model(
     classification_model,
     regularized_datagen,
@@ -192,12 +192,12 @@ classification_history = train_classification_model(
     test_labels
 )
 
-# 绘制训练过程图
+# Plot the training history
 plot_training_history(classification_history)
 
-# 测试集预测
+# Predict on test set
 test_predictions = np.argmax(classification_model.predict(test_images), axis=1)
 
-# 打印分类报告
+# Print classification report
 print("Classification Report:")
 print(classification_report(test_labels, test_predictions, target_names=["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"]))
