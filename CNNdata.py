@@ -2,86 +2,86 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from tensorflow.keras.preprocessing.image import ImageDataGenerator, img_to_array, load_img
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Activation, Flatten, Dense, Dropout, BatchNormalization
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.regularizers import l2
+from keras.preprocessing.image import ImageDataGenerator
+from keras.utils.image_utils import load_img, img_to_array
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Dense, Dropout, Flatten, BatchNormalization, Activation
+from keras.optimizers import Adam
+from keras.regularizers import l2
+from keras.utils import to_categorical
 from sklearn.metrics import classification_report
 import tensorflow as tf
 import random
 
-# Set random seeds for reproducibility
+# Fixed random seed
 np.random.seed(42)
 tf.random.set_seed(42)
 random.seed(42)
 
-# Image dimensions and batch size settings
+# Image size and training parameters
 img_width, img_height = 224, 224
 batch_size = 64
-epochs = 25
+epochs = 50
 
 # Data augmentation
 regularized_datagen = ImageDataGenerator(
-    rescale=1.0 / 255,  # Normalize pixel values
-    rotation_range=15,  # Random rotation
-    width_shift_range=0.15,  # Horizontal shift
-    height_shift_range=0.15,  # Vertical shift
-    zoom_range=0.2,  # Random zoom
-    horizontal_flip=True  # Horizontal flip
+    rescale=1.0 / 255,
+    rotation_range=15,
+    width_shift_range=0.15,
+    height_shift_range=0.15,
+    zoom_range=0.2,
+    horizontal_flip=True
 )
 
-# Map speed values to classification labels
+# Speed to class mapping
 speed_to_class = {0.0025: 0, 0.005: 1, 0.01: 2, 0.02: 3, 0.04: 4}
 
-# Function to build the classification model
+# Build classification model
 def build_classification_model(regularized=False):
-    reg = 0.005 if regularized else 0.0  # Regularization parameter
-    dropout_rate = 0.5 if regularized else 0.0  # Dropout rate
+    reg = l2(0.005) if regularized else None
+    dropout_rate = 0.5 if regularized else 0.0
 
     model = Sequential()
-    inputShape = (img_width, img_height, 3)
-
-    # First convolutional layer
-    model.add(Conv2D(32, (5, 5), padding="same", input_shape=inputShape, kernel_regularizer=l2(reg)))
+    model.add(Conv2D(32, (5, 5), padding="same", input_shape=(img_width, img_height, 3), kernel_regularizer=reg))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
-    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-    if dropout_rate > 0: model.add(Dropout(dropout_rate))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    if dropout_rate > 0:
+        model.add(Dropout(dropout_rate))
 
-    # Second convolutional layer
-    model.add(Conv2D(64, (5, 5), padding="same", kernel_regularizer=l2(reg)))
+    model.add(Conv2D(64, (5, 5), padding="same", kernel_regularizer=reg))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
-    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-    if dropout_rate > 0: model.add(Dropout(dropout_rate))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    if dropout_rate > 0:
+        model.add(Dropout(dropout_rate))
 
-    # Third convolutional layer
-    model.add(Conv2D(128, (5, 5), padding="same", kernel_regularizer=l2(reg)))
+    model.add(Conv2D(128, (5, 5), padding="same", kernel_regularizer=reg))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
-    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-    if dropout_rate > 0: model.add(Dropout(dropout_rate))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    if dropout_rate > 0:
+        model.add(Dropout(dropout_rate))
 
-    # Fully connected layer
     model.add(Flatten())
-    model.add(Dense(256, kernel_regularizer=l2(reg)))
+    model.add(Dense(256, kernel_regularizer=reg))
     model.add(BatchNormalization())
     model.add(Activation("relu"))
-    if dropout_rate > 0: model.add(Dropout(dropout_rate))
+    if dropout_rate > 0:
+        model.add(Dropout(dropout_rate))
 
-    # Classification output layer
-    model.add(Dense(5, activation="softmax"))  # 5 categories
+    model.add(Dense(5, activation="softmax"))
+
     return model
 
-# Check if the file path exists
+# Validate file paths
 def check_file_path(file_path, file_type="path"):
     if not os.path.exists(file_path):
         print(f"Error: {file_type.capitalize()} '{file_path}' does not exist.")
         return False
     return True
 
-# Load training data and assign classification labels
+# Load training images with labels
 def load_images_with_classes(paths_and_labels, img_size=(img_width, img_height)):
     images, labels = [], []
     for path, label in paths_and_labels.items():
@@ -90,15 +90,15 @@ def load_images_with_classes(paths_and_labels, img_size=(img_width, img_height))
         for filename in os.listdir(path):
             img_path = os.path.join(path, filename)
             try:
-                image = load_img(img_path, target_size=img_size)  # Load image and resize
-                image = img_to_array(image) / 255.0  # Normalize pixel values
+                image = load_img(img_path, target_size=img_size)
+                image = img_to_array(image) / 255.0
                 images.append(image)
-                labels.append(label)  # Assign label
+                labels.append(label)
             except Exception as e:
                 print(f"Skipping file: {filename}, error: {e}")
     return np.array(images), np.array(labels)
 
-# Load test data from an Excel file and assign classification labels
+# Load test images from Excel with labels
 def load_test_images_from_excel(test_path, labels_file, img_size=(img_width, img_height)):
     labels_df = pd.read_excel(labels_file)
     images, labels = [], []
@@ -112,36 +112,35 @@ def load_test_images_from_excel(test_path, labels_file, img_size=(img_width, img
             continue
 
         try:
-            image = load_img(img_path, target_size=img_size)  # Load image and resize
-            image = img_to_array(image) / 255.0  # Normalize pixel values
+            image = load_img(img_path, target_size=img_size)
+            image = img_to_array(image) / 255.0
             images.append(image)
 
-            # Map speed values to classification labels
+            # Map speed to class label
             labels.append(speed_to_class[speed])
         except Exception as e:
             print(f"Skipping file: {filename}, error: {e}")
 
     return np.array(images), np.array(labels)
 
-# Train the classification model
+# Train classification model
 def train_classification_model(model, datagen, train_images, train_labels, test_images, test_labels):
-    model.compile(optimizer=Adam(learning_rate=0.0001),
-                  loss="sparse_categorical_crossentropy",  # Use sparse categorical cross-entropy for integer labels
-                  metrics=["accuracy"])  # Track accuracy
+    model.compile(optimizer=Adam(learning_rate=0.00001),
+                  loss="categorical_crossentropy",
+                  metrics=["categorical_accuracy"])
 
     history = model.fit(
-        datagen.flow(train_images, train_labels, batch_size=batch_size),  # Training data generator
-        steps_per_epoch=len(train_images) // batch_size,  # Steps per epoch
-        epochs=epochs,  # Number of epochs
-        validation_data=(test_images, test_labels),  # Validation data
+        datagen.flow(train_images, train_labels, batch_size=batch_size),
+        steps_per_epoch=len(train_images) // batch_size,
+        epochs=epochs,
+        validation_data=(test_images, test_labels),
         verbose=1
     )
 
     return history
 
-# Plot the training history
+# Plot training history
 def plot_training_history(history):
-    # Plot loss
     plt.figure(figsize=(10, 5))
     plt.plot(history.history['loss'], label='Training Loss')
     plt.plot(history.history['val_loss'], label='Validation Loss')
@@ -152,10 +151,9 @@ def plot_training_history(history):
     plt.grid()
     plt.show()
 
-    # Plot accuracy
     plt.figure(figsize=(10, 5))
-    plt.plot(history.history['accuracy'], label='Training Accuracy')
-    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.plot(history.history['categorical_accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_categorical_accuracy'], label='Validation Accuracy')
     plt.title("Accuracy over Epochs")
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
@@ -163,7 +161,7 @@ def plot_training_history(history):
     plt.grid()
     plt.show()
 
-# Load training data
+# Paths to training data
 train_data = {
     'D:/CNN/data/train/velocity_0.0025': 0.0025,
     'D:/CNN/data/train/velocity_0.005': 0.005,
@@ -172,17 +170,18 @@ train_data = {
     'D:/CNN/data/train/velocity_0.01': 0.01
 }
 train_images, train_labels = load_images_with_classes(train_data)
-train_labels = np.array([speed_to_class[label] for label in train_labels])
+train_labels = to_categorical([speed_to_class[label] for label in train_labels])
 
-# Load test data
+# Paths to test data
 test_path = 'D:/CNN/data/test'
 test_labels_file = 'D:/CNN/data/test/test_images_speeds.xlsx'
 test_images, test_labels = load_test_images_from_excel(test_path, test_labels_file)
+test_labels = to_categorical(test_labels)
 
-# Build the classification model
+# Build classification model
 classification_model = build_classification_model(regularized=True)
 
-# Train the classification model
+# Train model
 classification_history = train_classification_model(
     classification_model,
     regularized_datagen,
@@ -192,12 +191,12 @@ classification_history = train_classification_model(
     test_labels
 )
 
-# Plot the training history
+# Plot training history
 plot_training_history(classification_history)
 
 # Predict on test set
 test_predictions = np.argmax(classification_model.predict(test_images), axis=1)
 
-# Print classification report
+# Classification report
 print("Classification Report:")
-print(classification_report(test_labels, test_predictions, target_names=["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"]))
+print(classification_report(np.argmax(test_labels, axis=1), test_predictions, target_names=["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"]))
